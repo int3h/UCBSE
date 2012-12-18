@@ -1,4 +1,7 @@
+#!/usr/bin/python
+
 import sys
+import argparse
 
 def out_indent(indent, *args):
     """
@@ -24,7 +27,7 @@ class LogicError(Exception):
 
 """
 Grammar:
-    module : stmt_list
+    module : stmt*
     stmt : "<%"! "for"! id "in"! js "%>" stmt_list "<%"! "end"! "%>"
          | "<%"! "if"! js "%>" stmt_list 
            ("<%"! "else"! "if"! js "%>" stmt_list)?
@@ -121,19 +124,20 @@ class If_AST(AST):
         
         if self.else_if_list:
             t = ""
-            t += "\n".join(["(else if \n" + js.out(indent + 4) + "\n" + stmt.out(indent + 4) + ")"
-                for js, stmt in self.else_if_list])
+            t += "\n".join(["(else if \n" + js.out(indent + 4) + "\n" + 
+                    stmt.out(indent + 4) + ")"
+                    for js, stmt in self.else_if_list])
             s += out_indent(indent, t + "\n")
 
         if self.else_stmt:
-            s += out_indent(indent, "(else \n" + self.else_stmt.out(indent + 4) + 
-                 ")")
+            s += out_indent(indent, 
+                    "(else \n" + self.else_stmt.out(indent + 4) + ")")
 
         return out_indent(indent, s)
 
 """ Parser """
 def module(token_list):
-    return Module_AST(stmt_list(token_list))
+    return Module_AST(*stmt_list(token_list).child)
 
 def stmt_list(token_list):
     stmt_list = []
@@ -173,7 +177,7 @@ def if_stmt(token_list):
 
     token_list.pop(0) # <%
     if token_list.pop(0) != END: # end
-        raise LogicError("Unmatching 'end' statement")
+        raise LogicError("Expected 'end' statement")
     token_list.pop(0) # %>
 
     return If_AST(if_tuple, else_if_list, else_stmt)
@@ -207,7 +211,7 @@ def for_stmt(token_list):
 
     token_list.pop(0) # <%
     if token_list.pop(0) != END:
-        raise LogicError("Unmatching 'end' statement")
+        raise LogicError("Expected 'end' statement")
     token_list.pop(0) # %>
 
     if len(token_list) >= 2 and token_list[1] == END:
@@ -234,18 +238,25 @@ def id_parse(token_list):
 
 """ Main """
 def main():
-    stdin = sys.stdin.read()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ast", help="print the ast", action="store_true")
+    parser.add_argument("file", help="the template file")
+    args = parser.parse_args()
+
+    template_file = open(args.file)
+    template_str = template_file.read()
+    template_file.close()
     
     # clean up input
     convert_token_list = [BEGIN_STMT, END_STMT]
     for token in convert_token_list:
-        stdin = stdin.replace(token, " " + token + " ")
+        template_str = template_str.replace(token, " " + token + " ")
     
     # create tokens and begin parsing
-    token_list = stdin.strip().split()
+    token_list = template_str.strip().split()
     
-    print module(token_list).out()
-
+    if args.ast:
+        print module(token_list).out()
 
 if __name__ == "__main__":
     main()

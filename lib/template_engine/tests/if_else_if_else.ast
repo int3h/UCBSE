@@ -1,0 +1,10 @@
+(module 
+    (if 
+        (js a)
+        (stmt_list 
+            (id a)))
+    (else if 
+        (js c)
+        (stmt_list 
+            (id b)))
+)

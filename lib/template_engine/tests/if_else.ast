@@ -1,0 +1,8 @@
+(module 
+    (if 
+        (js a)
+        (stmt_list 
+            (id a)))
+    (else 
+        (stmt_list 
+            (id b))))

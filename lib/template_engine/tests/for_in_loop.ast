@@ -1,0 +1,6 @@
+(module 
+    (for (id color) (js arr)
+        (stmt_list 
+            (block <b>)
+            (id color)
+            (block </b>))))
