@@ -1,0 +1,3 @@
+<% for color in arr %>
+	<b><% color %></b>
+<% end %>
