@@ -14,7 +14,7 @@ def main():
     correct_ast_str = " ".join(expected_output.strip().split())
     correct_ast_file.close()
     
-    proc = subprocess.Popen(['../template_parse.py', '--ast', args.testname + '.html.te'], stdout=subprocess.PIPE)
+    proc = subprocess.Popen(['../../template_parse.py', '--ast', args.testname + '.html.te'], stdout=subprocess.PIPE)
     got_output = proc.stdout.read()
     subject_ast_str = " ".join(got_output.strip().split())
 
