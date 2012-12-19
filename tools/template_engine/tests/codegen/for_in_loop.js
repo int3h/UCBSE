@@ -1,2 +1,2 @@
 arr = ["red", "blue", "green", "yellow"];
-TEMPLATE("for_in_loop", arr);
+TEMPLATE("../templates/for_in_loop", arr);

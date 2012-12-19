@@ -1,2 +1,2 @@
 var a = 1;
-var out = TEMPLATE('simple', a);
+var out = TEMPLATE('../templates/simple', a);

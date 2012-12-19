@@ -1,3 +1,3 @@
 a = true;
 b = false;
-TEMPLATE("if_else", a, b);
+TEMPLATE("../templates/if_else", a, b);

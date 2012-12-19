@@ -1,6 +1,4 @@
 default: check
 
-check: checkast
-
-checkast:
+check:
 	$(MAKE) -C tests all

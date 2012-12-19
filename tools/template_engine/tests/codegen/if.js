@@ -1,2 +1,2 @@
 a = true;
-TEMPLATE("if", a);
+TEMPLATE("../templates/if", a);
