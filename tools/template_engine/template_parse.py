@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import argparse
+import re
 
 class TokenList(list):
     def get(self):
@@ -65,7 +66,10 @@ Grammar for template files:
         if: if = (js block) else if = ("else if" js block ...) else = block 
 
 Grammar for TEMPLATE in js files:
+    js_file : js_stmt*
+    js_stmt : js_block | template_stmt | css_stmt
     template_stmt : "TEMPLATE"! "("! "\"" id "\"" (","! js_stmt)* ")"!
+    css_stmt : "CSS"! "("! "\"" id "\"" ")"!
     js_stmt : id | map
     map : "{" pair? ("," pair)* "}"
     pair : id ":" js
@@ -86,6 +90,7 @@ COLON = ":"
 LPAREN = "("
 RPAREN = ")"
 TEMPLATE = "TEMPLATE"
+CSS = "CSS"
 
 RESERVED_WORDS = [FOR, IF, ELSE, IN, END]
 
@@ -96,13 +101,18 @@ class AST:
 
 """ JS AST """
 class TemplateStmt_AST(AST):
-    pass
+    def out(self, indent=0):
+        return "(template_stmt \n" + \
+                "\n".join([c.out(indent+4) for c in self.child]) + ")"
 
 class Map_AST(AST):
-    pass
+    def out(self, indent):
+        return "(map \n" + \
+                "\n".join([c.out(indent+4) for c in self.child]) + ")"
 
 class Pair_AST(AST):
-    pass
+    def out(self, indent):
+        return "(pair " + self.child[0].out(0) + " " + self.child[1].out() + ")"
 
 """ Template AST """
 class Module_AST(AST):
@@ -226,7 +236,6 @@ def if_stmt(token_list):
 
     return If_AST(if_tuple, else_if_list, else_stmt)
 
-
 def block(token_list):
     child_list = [] 
     i = 0
@@ -319,30 +328,89 @@ def template_stmt(token_list):
     return TemplateStmt_AST(*template_args)
 
 """ Main """
-def tokens(file_path):
-    template_file = open(file_path)
-    template_str = template_file.read()
-    template_file.close()
-    
+def create_token_list(template_str, tokens=[]):
     # clean up input
-    convert_token_list = [BEGIN_STMT, END_STMT]
-    for token in convert_token_list:
+    for token in tokens:
         template_str = template_str.replace(token, " " + token + " ")
     
     # create token list
     return TokenList(template_str.strip().split())
 
-def template_ast(file_path):
-    token_list = tokens(file_path)
+def template_ast(template_str):
+    token_list = create_token_list(template_str, [BEGIN_STMT, END_STMT])
     return module(token_list).out()
 
-def js_ast(file_path):
-    token_list = tokens(file_path)
+def js_ast(js_str):
+    token_list = create_token_list(js_str, [TEMPLATE])
     return template_stmt(token_list).out()
 
-def codegen(file_path):
-    token_list = tokens(file_path)
+def codegen(token_list):
     return module(token_list).codegen()
+
+def js_lexer(js_str, tokens=[TEMPLATE, CSS]):
+    """
+    >>> tokens = ["TEMPLATE", "CSS"]
+    >>> js_lexer("TEMPLATE()", tokens) 
+    ['TEMPLATE()']
+    >>> js_lexer("TEMPLATE()CSS()", tokens) 
+    ['TEMPLATE()', 'CSS()']
+    >>> js_lexer("aaaTEMPLATE()bbbCSS()ccc", tokens) 
+    ['aaa', 'TEMPLATE()', 'bbb', 'CSS()', 'ccc']
+    >>> js_lexer("TEMPLATE()aaaCSS()bbbTEMPLATE()cccCSS()ddd", tokens) 
+    ['TEMPLATE()', 'aaa', 'CSS()', 'bbb', 'TEMPLATE()', 'ccc', 'CSS()', 'ddd']
+    >>> js_lexer("TEMPLATETEMPLATE()", tokens) 
+    ['TEMPLATE', 'TEMPLATE()']
+    >>> js_lexer("TEMPLATE    ()", tokens) 
+    ['TEMPLATE    ()']
+    >>> js_lexer("TEMPLATEaaa()", tokens) 
+    ['TEMPLATEaaa()']
+    >>> js_lexer("TEMPLATE(aaa, { aaa : bbb(()()) })", tokens) 
+    ['TEMPLATE(aaa, { aaa : bbb(()()) })']
+    """
+
+    token_list = []
+
+    pattern = re.compile("(" + "|".join(tokens) + ")\s*\(")
+
+    while True:
+        pos = 0
+        end_pos = len(js_str)
+        found = pattern.match(js_str[pos:end_pos])
+
+        if found:
+            token_start = 0
+            token_end = found.end() - 1
+        else:
+            found = pattern.search(js_str[pos:end_pos])
+            if found:
+                # if we find a token, create token out of the text before it
+                # and append it to token_lis
+                token_start = found.start()
+                token_end = found.end() - 1
+                token_list.append(js_str[0:token_start])
+            else:
+                # if cannot find token, create token for rest of string and 
+                # break out of loop
+                if pos != end_pos:
+                    token_list.append(js_str[pos:end_pos])
+                break
+
+        paren_stack = 0
+        while True:
+            if js_str[token_end] == LPAREN:
+                paren_stack += 1
+            elif js_str[token_end] == RPAREN:
+                paren_stack -= 1
+
+            token_end += 1
+
+            if paren_stack == 0:
+                token_list.append(js_str[token_start:token_end])
+                break
+                
+        js_str = js_str[token_end:end_pos]
+        
+    return token_list
 
 def main():
     parser = argparse.ArgumentParser()
@@ -351,12 +419,16 @@ def main():
     parser.add_argument("file", help="input file")
     args = parser.parse_args()
 
+    fp = open(args.file)
+    fp_str = fp.read()
+    fp.close()
+
     if args.templateast:
-        print template_ast(args.file)
+        print template_ast(fp_str)
     elif args.jsast:
-        print js_ast(args.file)
+        print js_ast(fp_str)
     else:
-        print codegen(args.file)
+        print codegen(fp_str)
 
 if __name__ == "__main__":
     main()
