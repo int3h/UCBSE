@@ -1,5 +1,10 @@
 #!/usr/bin/python
 
+"""
+Runs template_parse.py with the --ast option and compares the outputed ast 
+with a the correct ast file in this directory
+"""
+
 import argparse
 import sys
 import subprocess
@@ -14,7 +19,13 @@ def main():
     correct_ast_str = " ".join(expected_output.strip().split())
     correct_ast_file.close()
     
-    proc = subprocess.Popen(['../../template_parse.py', '--ast', args.testname + '.html.te'], stdout=subprocess.PIPE)
+    proc = subprocess.Popen(
+            [
+                '../../template_parse.py', 
+                '--ast', 
+                '../templates/' + args.testname + '.html.te'
+            ], 
+            stdout=subprocess.PIPE)
     got_output = proc.stdout.read()
     subject_ast_str = " ".join(got_output.strip().split())
 

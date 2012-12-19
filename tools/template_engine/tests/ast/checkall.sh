@@ -1,16 +1,18 @@
 #!/bin/bash
 
-ABSPATH=$(cd "$(dirname "$0")"; pwd)
+echo "*********************************************************************************************"
+echo "AST Tests"
+echo "---------------------------------------------------------------------------------------------"
 
 correct=()
 error=()
 
 count=0
 
-for f in $ABSPATH/*.ast
+for f in *.ast
 do
 	basename=`basename $f .ast`
-	command="$ABSPATH/checkast.py $ABSPATH/$basename"
+	command="./checkast.py $basename"
 	output=`$command`
 	rc=$?
 

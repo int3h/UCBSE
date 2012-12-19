@@ -1,6 +1,8 @@
 #!/bin/bash
 
-for f in *.html.te
+# Generates ast files for all template files
+
+for f in ../templates/*.html.te
 do
 	basename=`basename $f .html.te`
 	../template_parse.py --ast $f > $basename.ast
