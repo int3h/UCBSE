@@ -3,7 +3,7 @@
 all: ast codegen
 
 ast:
-	$(MAKE) -C ast
+	$(MAKE) -C template_ast
 
 codegen:
 	$(MAKE) -C codegen
