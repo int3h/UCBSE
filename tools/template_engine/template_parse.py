@@ -2,6 +2,10 @@
 
 import argparse
 import re
+import os
+from string import Template
+
+js_path = None
 
 class TokenList(list):
     def get(self):
@@ -101,8 +105,14 @@ RESERVED_WORDS = [FOR, IF, ELSE, IN, END]
 
 """ AST """
 class AST:
+    count = 0
     def __init__(self, *args):
         self.child = args
+        self.uid = self.count
+        AST.count += 1
+
+    def id_var(self):
+        return "_" + str(self.uid)
 
 """ JS AST """
 class JsFile_AST(AST):
@@ -110,35 +120,49 @@ class JsFile_AST(AST):
         return out_indent(indent, "(js_file \n" + \
                 "\n".join([c.out(indent+4) for c in self.child]) + ")")
 
+    def codegen(self, indent=0):
+        return out_indent(indent, 
+                "\n".join([c.codegen(indent+4) for c in self.child]))
+
 class TemplateStmt_AST(AST):
     def out(self, indent):
         return out_indent(indent, "(template_stmt \n" + \
                 "\n".join([c.out(indent+4) for c in self.child]) + ")")
+
+    def codegen(self, indent=0):
+        fp = open(os.path.join(os.path.dirname(js_path), self.child[0].name + ".html.te"))
+        fp_str = fp.read()
+        fp.close()
+        return out_indent(indent, template_ast(fp_str).codegen())
 
 class CssStmt_AST(AST):
     def out(self, indent=0):
         return out_indent(indent, "(css_stmt \n" + \
                 "\n".join([c.out(indent+4) for c in self.child]) + ")")
 
+    def codegen(self, indent=0):
+        pass
+
 class Map_AST(AST):
-    def out(self, indent):
+    def out(self, indent=0):
         return out_indent(indent, "(map \n" + \
                 "\n".join([c.out(indent+4) for c in self.child]) + ")")
 
 class Pair_AST(AST):
-    def out(self, indent):
+    def out(self, indent=0):
         return out_indent(indent, "(pair " + \
                 self.child[0].out(0) + " " + self.child[1].out(0) + ")")
 
 class JsBlock_AST(AST):
-    def out(self, indent):
+    def out(self, indent=0):
         return out_indent(indent, "(js_block " + self.child[0] + ")")
+
+    def codegen(self, indent=0):
+        return out_indent(indent, self.child[0])
+
 
 """ Template AST """
 class Module_AST(AST):
-    def __init__(self, *args):
-        AST.__init__(self, *args)
-
     def out(self, indent=0):
         return "(module \n" + \
                 "\n".join([c.out(indent+4) for c in self.child]) + ")"
@@ -147,11 +171,11 @@ class Module_AST(AST):
         return "".join([c.codegen(indent+4) for c in self.child])
 
 class Block_AST(AST):
-    def __init__(self, *args):
-        AST.__init__(self, *args)
-
     def out(self, indent):
         return out_indent(indent, "(block " + " ".join(self.child) + ")")
+
+    def codegen(self, indent=0):
+        return DOUBLEQUOTE + " ".join(self.child) + DOUBLEQUOTE
 
 class Id_AST(AST):
     def __init__(self, name):
@@ -160,21 +184,23 @@ class Id_AST(AST):
     def out(self, indent):
         return out_indent(indent, "(id " + self.name + ")")
 
-class Js_AST(AST):
-    def __init__(self, *args):
-        AST.__init__(self, *args)
+    def codegen(self, indent=0):
+        return self.name
 
+class Js_AST(AST):
     def out(self, indent):
         return out_indent(indent, "(js " + " ".join(self.child) + ")")
 
-class StmtList_AST(AST):
-    def __init__(self, *args):
-        AST.__init__(self, *args)
+    def codegen(self, indent=0):
+        return "".join(self.child)
 
+class StmtList_AST(AST):
     def out(self, indent):
         return out_indent(indent, "(stmt_list \n" + "\n".join(
             [c.out(indent + 4) for c in self.child]) + ")")
 
+    def codegen(self, indent=0):
+        return " + ".join([c.codegen(indent+4) for c in self.child])
 
 class For_AST(AST):
     def __init__(self, iterator_id, iterable, stmt_list):
@@ -187,6 +213,23 @@ class For_AST(AST):
                 self.iterable.out(0) + "\n" + self.stmt_list.out(indent + 4) 
                 + ")")
         
+    def codegen(self, indent=0):
+        t = Template(
+"""(function(arr){ 
+	var _s = "";  
+	for(var i = 0; i < arr.length; i++) {
+        $iterator_id = arr[i]
+		_s += $stmt_list;
+    }
+	return _s;
+}($iterable));""")
+        return t.substitute({
+                'iterator_id' : self.iterator_id.codegen(), 
+                'iterable' : self.iterable.codegen(),
+                'stmt_list' : self.stmt_list.codegen()
+            })
+
+
 class If_AST(AST):
     def __init__(self, if_stmt, else_if_list=None, else_stmt=None):
         self.if_stmt = if_stmt              # (js, stmt)
@@ -210,6 +253,55 @@ class If_AST(AST):
                     "(else \n" + self.else_stmt.out(indent + 4) + ")")
 
         return out_indent(indent, s)
+
+    def codegen(self, indent=0):
+        arg_list = [self.if_stmt]
+
+        if self.else_if_list:
+            arg_list.extend(self.else_if_list)
+
+        var_list = [arg[0].id_var() for arg in arg_list]
+        js_list = [arg[0].codegen() for arg in arg_list]
+        stmt_list = []
+        i = 0
+
+        if_template = Template("if($js) { _s += $stmt; }")
+        else_if_template = Template("else if($js) { _s += $stmt; }")
+        else_template = Template("else { _s += $stmt; }")
+
+        while i < len(arg_list):
+            #js = arg_list[i][0].id_var()
+            js = arg_list[i][0].codegen()
+            stmt = arg_list[i][1].codegen()
+            if i == 0:
+                stmt_list.append(if_template.substitute(
+                    {'js' : js, 'stmt' : stmt}))
+            else:
+                stmt_list.append(else_if_template.substitute(
+                    {'js' : js, 'stmt' : stmt}))
+            i += 1
+        if self.else_stmt:
+            stmt_list.append(else_template.substitute(
+                {'stmt' : self.else_stmt.codegen()}))
+
+#        return Template(
+#"""(function($var_list) { 
+#	var _s;
+#    $stmt_list
+#	return _s;
+#}($js_list));""").substitute({
+#        'var_list' : ", ".join(var_list), 
+#        'stmt_list' : " ".join(stmt_list),
+#        'js_list' : ", ".join(js_list),
+#    })
+        return Template(
+"""(function() { 
+	var _s;
+    $stmt_list
+	return _s;
+}());""").substitute({
+        'stmt_list' : " ".join(stmt_list),
+    })
 
 """ Template Parser """
 def module(token_list):
@@ -390,14 +482,11 @@ def create_token_list(template_str, tokens=[]):
 
 def template_ast(template_str):
     token_list = create_token_list(template_str, [BEGIN_STMT, END_STMT])
-    return module(token_list).out()
+    return module(token_list)
 
 def js_ast(js_str):
     token_list = js_lexer(js_str)
-    return js_file(token_list).out()
-
-def codegen(token_list):
-    return module(token_list).codegen()
+    return js_file(token_list)
 
 def js_lexer(js_str, tokens=[TEMPLATE, CSS]):
     """
@@ -478,6 +567,9 @@ def main():
     parser.add_argument("file", help="input file")
     args = parser.parse_args()
     
+    global js_path
+    js_path = args.file
+    
     """ read file """
     fp = open(args.file)
     fp_str = fp.read()
@@ -485,11 +577,11 @@ def main():
     
     """ execute program """
     if args.templateast:
-        print template_ast(fp_str)
+        print template_ast(fp_str).out()
     elif args.jsast:
-        print js_ast(fp_str)
+        print js_ast(fp_str).out()
     else:
-        print codegen(fp_str)
+        print js_ast(fp_str).codegen()
 
 if __name__ == "__main__":
     main()
