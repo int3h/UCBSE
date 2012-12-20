@@ -9,10 +9,10 @@ error=()
 
 count=0
 
-for f in *.ast
+for f in *.jsast
 do
-	basename=`basename $f .ast`
-	command="./checkast.py $basename"
+	basename=`basename $f .jsast`
+	command="./checkjsast.py $basename"
 	output=`$command`
 	rc=$?
 

@@ -1,0 +1,10 @@
+(js_file 
+    (js_block a = true;
+b = false;
+)
+    (template_stmt 
+        (id ../templates/if_else)
+        (id a)
+        (id b))
+    (js_block ;
+))

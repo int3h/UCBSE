@@ -1,0 +1,13 @@
+(js_file 
+    (template_stmt 
+        (id test)
+        (id a)
+        (id b)
+        (id c)
+        (map 
+            (pair (id d) (id e)))
+        (map 
+            (pair (id f) (id g))
+            (pair (id h) (id i))))
+    (js_block ;
+))

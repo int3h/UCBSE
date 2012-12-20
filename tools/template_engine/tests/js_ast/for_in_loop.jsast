@@ -1,0 +1,8 @@
+(js_file 
+    (js_block arr = ["red", "blue", "green", "yellow"];
+)
+    (template_stmt 
+        (id ../templates/for_in_loop)
+        (id arr))
+    (js_block ;
+))

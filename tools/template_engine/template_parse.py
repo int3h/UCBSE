@@ -8,16 +8,19 @@ class TokenList(list):
         """ removes and returns the first element of the list """
         return self.pop(0)
 
-    def get_expected(self, expected):
+    def get_expected(self, *args):
         """ 
         removes and returns the first element of the list and expects the poped 
         value to be equal to expected
         """
         actual = self.get()
-        if actual != expected:
-            raise LogicError("Expected '" + str(expected) + "', but got '" + 
-                    str(actual) + "' instead")
-        return actual
+
+        for expected in args:
+            if actual == expected:
+                return actual
+
+        raise LogicError("Expected '" + "' or '".join(expected) + "', but got '"
+                + str(actual) + "' instead")
 
 def out_indent(indent, *args):
     """
@@ -68,9 +71,9 @@ Grammar for template files:
 Grammar for TEMPLATE in js files:
     js_file : js_stmt*
     js_stmt : js_block | template_stmt | css_stmt
-    template_stmt : "TEMPLATE"! "("! "\"" id "\"" (","! js_stmt)* ")"!
+    template_stmt : "TEMPLATE"! "("! "\"" id "\"" (","! js_expr)* ")"!
     css_stmt : "CSS"! "("! "\"" id "\"" ")"!
-    js_stmt : id | map
+    js_expr : id | map
     map : "{" pair? ("," pair)* "}"
     pair : id ":" js
 """
@@ -83,10 +86,12 @@ END = "end"
 BEGIN_STMT = "<%"
 END_STMT = "%>"
 COMMA = ","
-QUOTE = "\""
+DOUBLEQUOTE = "\""
+SINGLEQUOTE = "'"
 LBRACE = "{"
 RBRACE = "}"
 COLON = ":"
+SEMICOLON = ";"
 LPAREN = "("
 RPAREN = ")"
 TEMPLATE = "TEMPLATE"
@@ -100,19 +105,34 @@ class AST:
         self.child = args
 
 """ JS AST """
-class TemplateStmt_AST(AST):
+class JsFile_AST(AST):
     def out(self, indent=0):
-        return "(template_stmt \n" + \
-                "\n".join([c.out(indent+4) for c in self.child]) + ")"
+        return out_indent(indent, "(js_file \n" + \
+                "\n".join([c.out(indent+4) for c in self.child]) + ")")
+
+class TemplateStmt_AST(AST):
+    def out(self, indent):
+        return out_indent(indent, "(template_stmt \n" + \
+                "\n".join([c.out(indent+4) for c in self.child]) + ")")
+
+class CssStmt_AST(AST):
+    def out(self, indent=0):
+        return out_indent(indent, "(css_stmt \n" + \
+                "\n".join([c.out(indent+4) for c in self.child]) + ")")
 
 class Map_AST(AST):
     def out(self, indent):
-        return "(map \n" + \
-                "\n".join([c.out(indent+4) for c in self.child]) + ")"
+        return out_indent(indent, "(map \n" + \
+                "\n".join([c.out(indent+4) for c in self.child]) + ")")
 
 class Pair_AST(AST):
     def out(self, indent):
-        return "(pair " + self.child[0].out(0) + " " + self.child[1].out() + ")"
+        return out_indent(indent, "(pair " + \
+                self.child[0].out(0) + " " + self.child[1].out(0) + ")")
+
+class JsBlock_AST(AST):
+    def out(self, indent):
+        return out_indent(indent, "(js_block " + self.child[0] + ")")
 
 """ Template AST """
 class Module_AST(AST):
@@ -150,6 +170,7 @@ class Js_AST(AST):
 class StmtList_AST(AST):
     def __init__(self, *args):
         AST.__init__(self, *args)
+
     def out(self, indent):
         return out_indent(indent, "(stmt_list \n" + "\n".join(
             [c.out(indent + 4) for c in self.child]) + ")")
@@ -208,10 +229,10 @@ def stmt_list(token_list):
 def if_stmt(token_list):
     token_list.get_expected(BEGIN_STMT) 
     token_list.get_expected(IF) 
-    js_stmt = js(token_list) # js
+    js_ast = js(token_list) # js
     token_list.get_expected(END_STMT)
 
-    if_tuple = (js_stmt, stmt_list(token_list)) # stmt
+    if_tuple = (js_ast, stmt_list(token_list)) # stmt
 
     else_if_list = []
     
@@ -219,9 +240,9 @@ def if_stmt(token_list):
         token_list.get_expected(BEGIN_STMT) 
         token_list.get_expected(ELSE) 
         token_list.get_expected(IF) 
-        js_stmt = js(token_list) # js
+        js_ast = js(token_list) # js
         token_list.get_expected(END_STMT)
-        else_if_list.append((js_stmt, stmt_list(token_list))) # stmt
+        else_if_list.append((js_ast, stmt_list(token_list))) # stmt
     
     else_stmt = None
     if(token_list[1] == ELSE):
@@ -286,7 +307,36 @@ def id_parse(token_list):
     return Id_AST(token_list.get())
 
 """ JS Parser """
+def js_file(token_list):
+    js_file_args = []
+    while len(token_list) > 0:
+        js_file_args.append(js_stmt(token_list))
+    return JsFile_AST(*js_file_args)
+
 def js_stmt(token_list):
+    if re.match(TEMPLATE + "\s*\(", token_list[0]):
+        return template_stmt(create_token_list(token_list.get(), 
+                [COMMA, TEMPLATE, LPAREN, RPAREN, LBRACE, RBRACE, COLON,
+                DOUBLEQUOTE, SINGLEQUOTE]))
+    elif re.match(CSS + "\s*\(", token_list[0]):
+        return css_stmt(create_token_list(token_list.get(),
+            [COMMA, DOUBLEQUOTE, SINGLEQUOTE, LPAREN, RPAREN]))
+    else:
+        return js_block(token_list)
+
+def css_stmt(token_list):
+    template_args = []
+    token_list.get_expected(CSS) 
+    token_list.get_expected(LPAREN) 
+    token_list.get_expected(DOUBLEQUOTE, SINGLEQUOTE) 
+    template_args.append(id_parse(token_list)) 
+    token_list.get_expected(DOUBLEQUOTE, SINGLEQUOTE) 
+    return CssStmt_AST(*template_args)
+
+def js_block(token_list):
+    return JsBlock_AST(token_list.get())
+
+def js_expr(token_list):
     if token_list[0] == LBRACE:
         return map_stmt(token_list)
     else:
@@ -294,7 +344,7 @@ def js_stmt(token_list):
 
 def map_stmt(token_list):
     pair_list = []
-    token_list.get_expected(RBRACE)
+    token_list.get_expected(LBRACE)
     while(token_list[0] != RBRACE):
         if token_list[0] == COMMA:
             token_list.get_expected(COMMA) 
@@ -307,21 +357,23 @@ def map_stmt(token_list):
 def pair_stmt(token_list):
     id_ast = id_parse(token_list) # id
     token_list.get_expected(COLON) 
-    js_ast = js_stmt(token_list) # js
+    js_ast = js_expr(token_list) # js
     return Pair_AST(id_ast, js_ast)
 
 def template_stmt(token_list):
     template_args = []
     token_list.get_expected(TEMPLATE) 
     token_list.get_expected(LPAREN) 
-    token_list.get_expected(QUOTE) 
+    token_list.get_expected(DOUBLEQUOTE, SINGLEQUOTE) 
     template_args.append(id_parse(token_list)) 
-    token_list.get_expected(QUOTE) 
+    token_list.get_expected(DOUBLEQUOTE, SINGLEQUOTE) 
     
-    while(token_list[0] != RPAREN):
-        if token_list[0] == COMMA:
-            token_list.get_expected(COMMA) 
-        template_args.append(pair_stmt(token_list))
+    while(len(token_list) > 1):
+        token_list.get_expected(COMMA) 
+        if token_list[0] == LBRACE:
+            template_args.append(map_stmt(token_list))
+        else:
+            template_args.append(id_parse(token_list))
     
     token_list.get_expected(RPAREN)
 
@@ -341,8 +393,8 @@ def template_ast(template_str):
     return module(token_list).out()
 
 def js_ast(js_str):
-    token_list = create_token_list(js_str, [TEMPLATE])
-    return template_stmt(token_list).out()
+    token_list = js_lexer(js_str)
+    return js_file(token_list).out()
 
 def codegen(token_list):
     return module(token_list).codegen()
@@ -368,7 +420,7 @@ def js_lexer(js_str, tokens=[TEMPLATE, CSS]):
     ['TEMPLATE(aaa, { aaa : bbb(()()) })']
     """
 
-    token_list = []
+    token_list = TokenList()
 
     pattern = re.compile("(" + "|".join(tokens) + ")\s*\(")
 
@@ -413,16 +465,25 @@ def js_lexer(js_str, tokens=[TEMPLATE, CSS]):
     return token_list
 
 def main():
+    """ arguments """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--templateast", help="prints the ast given a template file", action="store_true")
-    parser.add_argument("--jsast", help="print the ast given a js file", action="store_true")
+    parser.add_argument(
+            "--templateast", 
+            help="prints the ast given a template file", 
+            action="store_true")
+    parser.add_argument(
+            "--jsast", 
+            help="print the ast given a js file", 
+            action="store_true")
     parser.add_argument("file", help="input file")
     args = parser.parse_args()
-
+    
+    """ read file """
     fp = open(args.file)
     fp_str = fp.read()
     fp.close()
-
+    
+    """ execute program """
     if args.templateast:
         print template_ast(fp_str)
     elif args.jsast:
