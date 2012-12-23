@@ -130,7 +130,8 @@ class TemplateStmt_AST(AST):
                 "\n".join([c.out(indent+4) for c in self.child]) + ")")
 
     def codegen(self, indent=0):
-        fp = open(os.path.join(os.path.dirname(js_path), self.child[0].name + ".html.te"))
+        fp = open(os.path.join(os.path.dirname(js_path), 
+                                self.child[0].name + ".html.te"))
         fp_str = fp.read()
         fp.close()
         return out_indent(indent, template_ast(fp_str).codegen())

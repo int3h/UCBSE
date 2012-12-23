@@ -1,8 +1,11 @@
 .PHONY: all ast
 
-all: ast codegen
+all: templateast codegen jsast
 
-ast:
+jsast:
+	$(MAKE) -C js_ast
+
+templateast:
 	$(MAKE) -C template_ast
 
 codegen:
