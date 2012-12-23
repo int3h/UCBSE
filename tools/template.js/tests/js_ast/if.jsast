@@ -1,8 +1,0 @@
-(js_file 
-    (js_block a = true;
-)
-    (template_stmt 
-        (id ../templates/if)
-        (id a))
-    (js_block ;
-))

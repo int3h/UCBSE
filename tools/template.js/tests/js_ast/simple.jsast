@@ -1,8 +1,0 @@
-(js_file 
-    (js_block var a = 1;
-var out = )
-    (template_stmt 
-        (id ../templates/simple)
-        (id a))
-    (js_block ;
-))

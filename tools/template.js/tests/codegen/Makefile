@@ -1,2 +1,0 @@
-codegen:
-	./checkall.sh	
