@@ -1,3 +1,0 @@
-[submodule "template.js"]
-	path = tools/template.js
-	url = git@github.com:athk/template.js.git
